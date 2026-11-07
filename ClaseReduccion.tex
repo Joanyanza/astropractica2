@@ -1,0 +1,388 @@
+\documentclass[11pt,twocolumn]{article}
+\usepackage[margin=1in]{geometry}
+\usepackage[spanish,es-noshorthands]{babel}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{amsmath,amssymb}
+\usepackage{tikz}
+\usetikzlibrary{shapes.geometric}
+\usepackage{caption}
+\setlength{\columnsep}{0.65cm}
+\usepackage{fvextra}
+\RecustomVerbatimEnvironment{verbatim}{Verbatim}{fontsize=\small,breaklines=true,breakanywhere=true}
+
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{0.25\baselineskip}
+\raggedbottom
+
+\title{Reducción de imágenes astronómicas: calibración y overscan}
+\author{Daniel Soto Villada y Joan Mauricio Yanza Ruiz}
+\date{\today}
+\newcommand{\widefigure}[2]{\begin{figure*}[!t]\centering\input{#1}\caption{#2}\end{figure*}}
+\newcommand{\singlefigure}[2]{\par\begin{center}\input{#1}\captionof{figure}{#2}\end{center}\par}
+
+\begin{document}
+
+\twocolumn[\begin{center}
+  {\Large\bfseries Reducción de imágenes astronómicas}\par
+  {\normalsize Calibración de CCD y corrección de \texttt{overscan}}\par
+  \vspace{0.35em}
+  {\normalsize Daniel Soto Villada y Joan Mauricio Yanza Ruiz}\par
+  {\small Instituto de Física, Facultad de Ciencias Exactas y Naturales, Universidad de Antioquia}\par
+  {\normalsize \today}\par
+\end{center}\vspace{1em}]
+
+\section*{1. El detector CCD e imágenes de calibración}
+
+La lectura de un detector CCD puede ser lenta: el sistema debe leer cada píxel y
+convertir su señal en un valor digital. Además de la imagen científica, se toman
+imágenes de calibración para medir y corregir la respuesta instrumental. Las
+imágenes \texttt{bias}, \texttt{dark} y \texttt{flat} describen efectos
+diferentes y no deben confundirse.
+
+\subsection*{Bias: nivel de lectura}
+El \texttt{bias} (o nivel cero) mide la señal introducida por la electrónica al
+leer el CCD, incluso cuando no llega luz al detector. Se obtiene con el obturador
+cerrado y con el menor tiempo de exposición posible, idealmente cercano a cero.
+Aunque se espera un nivel aproximadamente constante, la lectura contiene ruido,
+por lo que los píxeles presentan pequeñas fluctuaciones alrededor de ese nivel.
+
+\singlefigure{figuras/ruido_ccd.tex}{Fluctuaciones de lectura del CCD alrededor del nivel medio.}
+
+\subsection*{Dark: corriente oscura}
+La imagen \texttt{dark} registra señal no deseada producida principalmente por
+la agitación térmica del detector. Su magnitud depende del tiempo de exposición
+y de la temperatura. Se toma con el obturador cerrado y con un tiempo igual al
+de la imagen científica. Muchos telescopios enfrían el CCD y reducen así la
+corriente oscura; aun así, se pueden tomar \texttt{darks} al comienzo o al final
+de la noche para comprobar su nivel.
+
+\subsection*{Flat: respuesta píxel a píxel}
+Un \texttt{flat} mide cómo responde cada píxel del CCD ante una iluminación
+uniforme. Permite corregir diferencias de sensibilidad entre píxeles, polvo u
+otras variaciones del sistema óptico y píxeles defectuosos. Se obtiene
+apuntando a una fuente uniformemente iluminada, como una pantalla blanca o el
+cielo al atardecer. Se debe tomar un conjunto de \texttt{flats} para cada filtro.
+
+\section*{2. Calibración y preparación de los datos}
+
+Una vez corregido el nivel de lectura y la señal oscura, se divide por el
+\texttt{flat} normalizado. En forma esquemática, para cada píxel:
+\[
+  I_{\mathrm{limpia}} =
+  \frac{I_{\mathrm{cruda}}-I_{\mathrm{bias}}-I_{\mathrm{dark}}}
+       {I_{\mathrm{flat, normalizado}}}.
+\]
+El \texttt{flat} se normaliza para que su nivel medio sea uno; así la división
+corrige variaciones relativas sin cambiar arbitrariamente el brillo global de
+la imagen.
+
+\widefigure{figuras/proceso_calibracion.tex}{Secuencia de corrección de la imagen cruda mediante bias, dark y flat normalizado.}
+
+\subsection*{Preparación en IRAF}
+El ejemplo de las notas utiliza archivos con nombres del tipo
+\texttt{m92001.fits}. Primero se descomprime el archivo de datos en la carpeta
+de trabajo. Después se inicia IRAF y se cambia a esa carpeta. Los comandos que
+se muestran a continuación se ejecutan en la terminal de IRAF:
+
+\begin{verbatim}
+rfits fm92** "" junk old+
+ls
+ds9 &
+\end{verbatim}
+
+Se abren varias imágenes en marcos distintos de DS9 para compararlas. Por
+ejemplo, se pueden cargar las imágenes \texttt{m92001.fits},
+\texttt{m92006.fits} y \texttt{m92015.fits} en marcos separados con
+\texttt{display m92001.fits 1}, \texttt{display m92006.fits 2} y
+\texttt{display m92015.fits 6}. A continuación se inspeccionan los encabezados:
+
+\begin{verbatim}
+imheader m92*.fits l+
+imheader m92001.fits l+
+\end{verbatim}
+
+{\raggedright
+El encabezado identifica el tipo mediante \texttt{IMAGETYP} y puede incluir las coordenadas \texttt{RA} y \texttt{DEC}, el filtro \texttt{FILTERS} y la temperatura \texttt{CAMTEMP}. Por ejemplo, \texttt{m92001.fits [316,509][real]: ave of 25 bias} indica que el archivo contiene el promedio de 25 imágenes \texttt{bias} de 316 por 509 píxeles.
+\par}
+
+\section*{3. Inspección de imágenes y perfiles con \texttt{implot}}
+
+Se visualizan las imágenes en DS9 y se describen sus rasgos generales. Para
+examinar los valores de los píxeles a lo largo de una fila o columna se usa
+\texttt{implot}. Por ejemplo:
+
+\begin{verbatim}
+implot m92001
+\end{verbatim}
+
+En el ejemplo se inspecciona la línea 255. El perfil puede comenzar con un
+aumento, disminuir después y mostrar fluctuaciones alrededor de un nivel de
+aproximadamente 500 cuentas. Promediar varias líneas ayuda a distinguir la
+señal sistemática del ruido. En la ventana de \texttt{implot}, la combinación
+\texttt{Shift} + \texttt{:} abre la entrada de comandos; se puede solicitar,
+por ejemplo, el promedio de las líneas 10 a 500 con \texttt{: l 10 500}.
+
+\widefigure{figuras/perfil_implot.tex}{La malla muestra las cuentas de cada píxel; la fila elegida produce el perfil y permite localizar el overscan.}
+
+Para inspeccionar \texttt{m92006}, se repiten \texttt{display} e \texttt{implot} y se promedian las líneas pertinentes. El ejemplo muestra un rayo vertical en DS9 que coincide con un pico del perfil después de la columna 300. Comparar ambas vistas permite localizar estructuras que conviene excluir del análisis.
+
+\subsection*{La región overscan}
+En algunos detectores se leen filas o columnas adicionales, aunque no formen
+parte del área fotosensible. Esta región ficticia, llamada \texttt{overscan},
+permite seguir el nivel electrónico de lectura (el \texttt{bias} del
+amplificador). En el perfil aparece como una subida o caída marcada al llegar
+al borde de la imagen. Los \texttt{overscans} también pueden observarse en los
+\texttt{flats}; en las imágenes del conjunto de ejemplo se señalan en
+\texttt{m92007} y \texttt{m92010}.
+
+\section*{4. Identificación y recorte del overscan}
+
+Para tener más información sobre el nivel de lectura, el detector puede
+incorporar una zona de lectura adicional en uno o ambos bordes. Como no
+corresponde a la escena observada, esa zona debe identificarse y excluirse antes
+del análisis científico. En estas notas el exceso aparece en columnas, por lo
+que se emplea la tarea \texttt{colbias}; si el exceso estuviera en filas, se
+consideraría una corrección de tipo \texttt{linebias}.
+
+\widefigure{figuras/region_overscan.tex}{Área científica conservada y región overscan usada para estimar bias.}
+
+La secuencia de consulta y configuración de IRAF es:
+
+\begin{verbatim}
+help colbias
+noao
+imred
+bias
+unlearn colbias
+lpar colbias
+help colbias
+\end{verbatim}
+
+\texttt{help colbias} muestra la ayuda de la tarea; \texttt{noao},
+\texttt{imred} y \texttt{bias} permiten entrar en los paquetes pertinentes.
+\texttt{unlearn colbias} restablece los parámetros, y \texttt{lpar colbias}
+los lista para su revisión. La sección de ejemplos de la ayuda muestra cómo
+asignar la región que se usará para el nivel de \texttt{bias}; por ejemplo, la
+sintaxis puede escribirse como:
+
+\begin{verbatim}
+cl> colbias.bias = "[301:832]"
+\end{verbatim}
+
+La región se expresa como \texttt{[x1:x2,y1:y2]}, donde el primer intervalo
+corresponde a columnas y el segundo a filas. Conviene confirmar la orientación
+de los ejes y los límites con la imagen concreta antes de aplicar la tarea.
+
+\section*{5. Selección de las regiones \texttt{BIAS} y \texttt{TRIM}}
+
+Los límites no se deben elegir a ciegas: se inspecciona el perfil con
+\texttt{implot} y se hace zoom sobre los bordes de la imagen. En la ventana de
+\texttt{implot}, \texttt{e} amplía la región seleccionada, \texttt{r} permite
+volver a la vista anterior y \texttt{q} cierra la tarea. La combinación
+\texttt{Shift} + \texttt{?} muestra las funciones disponibles.
+
+Para elegir las filas o líneas que se promediarán, se puede examinar una línea
+con \texttt{c 225} y promediar un intervalo con \texttt{c 10 300}. El perfil
+debe mostrar dónde termina el área útil y dónde comienza el nivel de lectura
+del borde. En el ejemplo, la región de \texttt{bias} ocupa las columnas 330 a
+350 y las filas 2 a 510:
+
+\[
+  \texttt{BIAS} = [330:350,\,2:510].
+\]
+
+El área científica se conserva mediante la región \texttt{TRIM}. Para el
+ejemplo, se retienen las columnas 1 a 318 y las filas 2 a 510:
+
+\[
+  \texttt{TRIM} = [1:318,\,2:510].
+\]
+
+Los valores anteriores son ilustrativos y deben verificarse en cada imagen:
+se amplía el borde izquierdo para localizar el comienzo del área útil y el
+borde derecho para ubicar el final de la región científica y el
+\texttt{overscan}. Una vez delimitadas ambas regiones, se configura
+\texttt{colbias} para estimar y sustraer el nivel de lectura, y se recorta la
+imagen a \texttt{TRIM} para continuar el análisis solo con los píxeles de la
+escena.
+
+
+\section*{6. Aplicación de \texttt{colbias} por lotes}
+
+Una vez definidos los intervalos \texttt{BIAS} y \texttt{TRIM}, se guardan en
+los parámetros de la tarea \texttt{colbias}. Desde IRAF se abre el editor de
+parámetros con \texttt{epar colbias} y se revisan las opciones:
+
+\begin{itemize}
+  \item \texttt{function = chebyshev}: ajusta un polinomio de Chebyshev al
+  nivel de lectura. El rechazo bajo y alto de tres desviaciones estándar
+  descarta valores extremos; con dos desviaciones, la desigualdad de
+  Chebyshev garantiza al menos el 75\% de los datos para una distribución
+  general.
+  \item \texttt{interactive = no} y \texttt{median = no}: no se solicita un
+  ajuste interactivo ni se usa la mediana.
+  \item \texttt{order = 1}: se usa un ajuste de primer orden.
+  \item \texttt{low\_reject = 3.0} y \texttt{high\_reject = 3.0}: fijan los
+  umbrales de rechazo en ambos lados.
+\end{itemize}
+
+Al terminar, se elige \texttt{Save and Quit}. Para procesar un conjunto de
+archivos se preparan dos listas: una con los nombres de entrada y otra con los
+nombres de salida. La segunda contiene el prefijo \texttt{Trm} para distinguir
+las imágenes recortadas y corregidas.
+
+\begin{verbatim}
+ls m92*.fits
+ls m92*.fits > input
+\end{verbatim}
+
+Se copia la lista \texttt{input}, se cambia el nombre de la copia a
+\texttt{output} y se añade \texttt{Trm} al inicio de cada nombre. Después se
+indica a \texttt{colbias} que lea ambas listas y se ejecuta la tarea:
+
+\begin{verbatim}
+epar colbias
+input  = @input
+output = @output
+\end{verbatim}
+
+\widefigure{figuras/listas_colbias.tex}{Flujo por lotes de colbias mediante listas de entrada y salida.}
+
+El resultado es un conjunto de archivos con prefijo \texttt{Trm92}. Se verifica su generación y se inspecciona una imagen para confirmar que el recorte eliminó el \texttt{overscan} sin quitar área útil.
+
+\section*{7. Verificación y clasificación de las imágenes}
+
+Se comparan en DS9 una imagen original y su resultado de \texttt{colbias}:
+
+\begin{verbatim}
+display m92010.fits 1
+display Trm92010.fits 2
+\end{verbatim}
+
+En el ejemplo se comprueba que se eliminó la zona negra del borde. También se
+observa que las cuentas pueden seguir siendo altas: \texttt{colbias} corrige
+el nivel del borde y recorta la imagen, pero no sustituye la corrección de
+\texttt{flat}. Conviene comprobar además que no se haya perdido una región
+iluminada del lado izquierdo.
+
+La clasificación se confirma con los encabezados FITS. En el conjunto de
+práctica se identifican los siguientes tipos de imagen:
+
+\begin{center}
+\small
+\begin{tabular}{ll}
+\hline
+Archivo & Tipo y filtro\\
+\hline
+\texttt{m92001} & \texttt{bias}\\
+\texttt{m92006} & \texttt{flat}, filtro B\\
+\texttt{m92007} & \texttt{flat}, filtro V\\
+\texttt{m92010}/\texttt{m92011} & Ciencia, V\\
+\texttt{m92014}/\texttt{m92015} & Ciencia, B\\
+\hline
+\end{tabular}
+\end{center}
+
+Las imágenes \texttt{m92010} y \texttt{m92011} se comparan con el
+\texttt{flat} V; las imágenes \texttt{m92014} y \texttt{m92015}, con el
+\texttt{flat} B. Mantener separadas las bandas evita aplicar una corrección de
+sensibilidad que no corresponde al filtro usado en la observación.
+
+\section*{8. Normalización de los \texttt{flats}}
+
+En este conjunto no hay imágenes \texttt{dark}: las observaciones se hicieron
+con un CCD refrigerado y, según las notas, se omite esa corrección. El siguiente
+paso es normalizar cada \texttt{flat} para poder dividir las imágenes
+científicas por él.
+
+Un \texttt{flat} ideal tendría la misma cuenta en todos sus píxeles. En la
+práctica, los píxeles responden de manera algo diferente y el nivel de cuentas
+varía. Se estima un valor representativo con la moda (el valor más frecuente)
+y se divide el \texttt{flat} por esa constante.
+
+\widefigure{figuras/flat_pixeles.tex}{Comparación entre la respuesta ideal uniforme y las variaciones de un flat real.}
+
+La tarea \texttt{imstat} resume estadísticas de las imágenes. Se puede
+consultar su ayuda y solicitar, por ejemplo, el nombre, la media y la moda:
+
+\begin{verbatim}
+imstat BTrm92006.fits
+help imstat
+imstat BTrm92006.fits fields="image,mean,mode"
+imstat BTrm92006.fits,BTrm92007.fits fields="image,mode"
+\end{verbatim}
+
+Para las imágenes de ejemplo, las notas usan 1312 cuentas para el filtro B y
+1467 para el filtro V. Se divide cada \texttt{flat} por su propio valor y se
+crean los archivos \texttt{NFlatB} y \texttt{NFlatV}:
+
+\begin{verbatim}
+imarith BTrm92006.fits / 1312 NFlatB.fits
+imarith BTrm92007.fits / 1467 NFlatV.fits
+\end{verbatim}
+
+Estas constantes son específicas de los datos de práctica; antes de usarlas en
+otras imágenes se debe volver a calcular la moda. La normalización cambia la
+escala de las cuentas, aunque la apariencia general del \texttt{flat} pueda
+parecer similar.
+
+\section*{9. Corrección con el \texttt{flat} correspondiente}
+
+Se divide cada imagen científica por el \texttt{flat} normalizado del mismo
+filtro. Por tanto, se usa \texttt{NFlatV} solo para las observaciones V y
+\texttt{NFlatB} solo para las observaciones B. El prefijo \texttt{F} en los
+archivos de salida señala que se aplicó la corrección de \texttt{flat}.
+
+\widefigure{figuras/correccion_filtros.tex}{Aplicación del flat normalizado correspondiente a cada filtro.}
+
+La operación \texttt{imarith} se aplica a cada imagen; algunos ejemplos son:
+
+\begin{verbatim}
+imarith BTrm92010.fits / NFlatV.fits FBTrm92010.fits
+imarith BTrm92011.fits / NFlatV.fits FBTrm92011.fits
+imarith BTrm92014.fits / NFlatB.fits FBTrm92014.fits
+imarith BTrm92015.fits / NFlatB.fits FBTrm92015.fits
+\end{verbatim}
+
+Se inspecciona el resultado comparando la imagen antes y después de dividir por
+el \texttt{flat}, por ejemplo, \texttt{display m92010.fits 1} y
+\texttt{display FBTrm92010.fits 2}. También se puede visualizar el propio
+\texttt{flat} normalizado junto con el original para comprobar que la
+normalización conserva su patrón espacial y cambia la escala de los valores.
+
+\section*{10. Inicio de la fotometría y masa de aire}
+
+Con las imágenes corregidas se inicia la etapa de fotometría. Primero se
+revisan los encabezados y se visualizan imágenes de cada filtro:
+
+\begin{verbatim}
+imheader FBTrm92*.fits l-
+ds9 &
+display FBTrm92010.fits 1
+display FBTrm92014.fits 2
+\end{verbatim}
+
+La masa de aire describe la cantidad relativa de atmósfera atravesada por la
+luz desde el objeto hasta el telescopio. Es mínima cerca del cenit y aumenta
+hacia el horizonte; debe tenerse en cuenta al preparar la fotometría y
+caracterizar la función de dispersión puntual (PSF).
+
+\singlefigure{figuras/masa_aire.tex}{La masa de aire aumenta cuando la observación se aleja del cenit.}
+
+Para completar los encabezados se consulta la tarea \texttt{setairmass} y se
+entra en el paquete de utilidades astronómicas de IRAF. Las notas también
+proponen guardar el encabezado de una imagen en un archivo de texto para
+inspeccionarlo:
+
+\begin{verbatim}
+help setairmass
+noao
+astutil
+imheader FBTrm92010.fits > header
+\end{verbatim}
+
+El archivo \texttt{header} permite revisar la información disponible antes de
+asignar o verificar la masa de aire de las imágenes.
+
+\end{document}

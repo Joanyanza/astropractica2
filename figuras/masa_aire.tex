@@ -1,0 +1,15 @@
+\begin{tikzpicture}[x=0.52cm,y=0.55cm]
+  \fill[blue!8] (-0.2,0.5) rectangle (10,1.1);
+  \draw[thick] (-0.2,0.5) -- (10,0.5);
+  \node[below] at (7.2,0.5) {superficie terrestre};
+  \node[draw,circle,fill=black,inner sep=1.5pt,label=below left:{telescopio}] (obs) at (2,0.5) {};
+  \draw[->,very thick,blue] (2,0.5) -- (2,5.2);
+  \draw[->,very thick,red] (2,0.5) -- (8.6,3.9);
+  \node[star,star points=5,fill=yellow!80!orange,draw,minimum size=0.45cm] at (2,5.2) {};
+  \node[star,star points=5,fill=yellow!80!orange,draw,minimum size=0.45cm] at (8.6,3.9) {};
+  \draw[dashed] (2,0.5) -- (8.6,0.5);
+  \draw (2,1.55) arc[start angle=90,end angle=63,radius=1.05];
+  \node at (2.55,1.8) {$z$};
+  \node[anchor=east,align=right,blue] at (0.3,3.1) {cerca del\\cenit: menor\\masa de aire};
+  \node[align=center,red] at (7.1,2.2) {trayecto oblicuo\\más largo};
+\end{tikzpicture}
